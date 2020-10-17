@@ -44,7 +44,7 @@ const (
 )
 
 func NewBot(token string, interval int) *Bot {
-	//create and instance
+	//create a new instance
 	b := &Bot{
 		input:          make(chan *input),
 		Output:         make(chan *output),
