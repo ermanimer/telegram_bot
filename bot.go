@@ -13,7 +13,7 @@ import (
 )
 
 type Bot struct {
-	Input          chan *input
+	input          chan *input
 	Output         chan *output
 	token          string
 	chats          map[int]bool
@@ -46,7 +46,7 @@ const (
 func NewBot(token string, interval int) *Bot {
 	//create and instance
 	b := &Bot{
-		Input:          make(chan *input),
+		input:          make(chan *input),
 		Output:         make(chan *output),
 		token:          token,
 		chats:          make(map[int]bool),
@@ -58,7 +58,7 @@ func NewBot(token string, interval int) *Bot {
 	//listen input channel
 	go func() {
 		for {
-			i := <-b.Input
+			i := <-b.input
 			//receive start signal to start getting chat updates
 			if i.Start {
 				if b.isStarted {
@@ -95,14 +95,14 @@ func NewBot(token string, interval int) *Bot {
 
 //starts getting updates
 func (b *Bot) Start() {
-	b.Input <- &input{
+	b.input <- &input{
 		Start: true,
 	}
 }
 
 //stops getting updates
 func (b *Bot) Stop() {
-	b.Input <- &input{
+	b.input <- &input{
 		Stop: true,
 	}
 }
@@ -110,14 +110,14 @@ func (b *Bot) Stop() {
 //sends message to all active chats
 func (b *Bot) SendMessage(messages ...interface{}) {
 	messageFormat := createMessageFormat(len(messages))
-	b.Input <- &input{
+	b.input <- &input{
 		Message: fmt.Sprintf(messageFormat, messages...),
 	}
 }
 
 //sends formatted message to all active chats
 func (b *Bot) SendMessagef(messageFormat string, messages ...interface{}) {
-	b.Input <- &input{
+	b.input <- &input{
 		Message: fmt.Sprintf(messageFormat, messages...),
 	}
 }
