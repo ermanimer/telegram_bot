@@ -12,6 +12,18 @@ import (
 	"time"
 )
 
+type Bot struct {
+	Output         chan *Output
+	token          string
+	chats          map[int]bool
+	isStarted      bool
+	getUpdatesUrl  string
+	sendMessageUrl string
+	interval       time.Duration
+	offset         int
+	mutex          *sync.Mutex
+}
+
 const (
 	chatsFile         = "./chats.json"
 	chatsFileFileMode = 0644
@@ -27,19 +39,15 @@ const (
 	stopCommand  = "/stop"
 )
 
-var b *Bot
-
 func Initialize(token string, interval int) *Bot {
-	if b == nil {
-		b = &Bot{
-			Output:         make(chan *Output),
-			token:          token,
-			chats:          make(map[int]bool),
-			getUpdatesUrl:  strings.ReplaceAll(getUpdatesUrlTemplate, "<token>", token),
-			sendMessageUrl: strings.ReplaceAll(sendMessageUrlTemplate, "<token>", token),
-			interval:       time.Duration(interval) * time.Millisecond,
-			mutex:          &sync.Mutex{},
-		}
+	b := &Bot{
+		Output:         make(chan *Output),
+		token:          token,
+		chats:          make(map[int]bool),
+		getUpdatesUrl:  strings.ReplaceAll(getUpdatesUrlTemplate, "<token>", token),
+		sendMessageUrl: strings.ReplaceAll(sendMessageUrlTemplate, "<token>", token),
+		interval:       time.Duration(interval) * time.Millisecond,
+		mutex:          &sync.Mutex{},
 	}
 	return b
 }
@@ -53,23 +61,23 @@ func (b *Bot) Start() error {
 	}
 	go func() {
 		b.isStarted = true
-		publishInfoMessage("bot is started")
-		err := loadChats()
+		b.info("bot is started")
+		err := b.loadChats()
 		if err != nil {
-			publishErrorMessage(err.Error())
+			b.error(err.Error())
 		}
 		for {
 			time.Sleep(b.interval)
 			if !b.isStarted {
 				break
 			}
-			r, err := getUpdates()
+			r, err := b.getUpdates()
 			if err != nil {
-				fmt.Println(err.Error())
+				b.error(err.Error())
 				continue
 			}
 			if !r.Ok {
-				publishErrorMessage(fmt.Sprintf("getting updates failed error code: %v description: %v", r.ErrorCode, r.Description))
+				b.error(fmt.Sprintf("getting updates failed error code: %v description: %v", r.ErrorCode, r.Description))
 				continue
 			}
 			us := r.Result
@@ -88,15 +96,15 @@ func (b *Bot) Start() error {
 				case stopCommand:
 					b.chats[chatId] = false
 				}
-				publishInfoMessage(fmt.Sprintf("%v command received from chat id: %v first name: %v last name: %v", command, chatId, firstName, lastName))
+				b.info(fmt.Sprintf("%v command received from chat id: %v first name: %v last name: %v", command, chatId, firstName, lastName))
 				b.offset = updateId + 1
 			}
-			err = updateChats()
+			err = b.updateChats()
 			if err != nil {
-				publishErrorMessage(err.Error())
+				b.error(err.Error())
 			}
 		}
-		publishInfoMessage("bot is stopped")
+		b.info("bot is stopped")
 	}()
 	return nil
 }
@@ -120,20 +128,20 @@ func (b *Bot) SendMessage(message string) error {
 	defer b.mutex.Unlock()
 	for chatId, isStarted := range b.chats {
 		if isStarted {
-			r, err := sendMessage(chatId, message)
+			r, err := b.sendMessage(chatId, message)
 			if err != nil {
-				publishErrorMessage(err.Error())
+				b.error(err.Error())
 				continue
 			}
 			if !r.Ok {
-				publishErrorMessage(fmt.Sprintf("sending message failed to chat id: %v error code: %v description: %v", chatId, r.ErrorCode, r.Description))
+				b.error(fmt.Sprintf("sending message failed to chat id: %v error code: %v description: %v", chatId, r.ErrorCode, r.Description))
 			}
 		}
 	}
 	return nil
 }
 
-func getUpdates() (*GetUpdatesResponse, error) {
+func (b *Bot) getUpdates() (*GetUpdatesResponse, error) {
 	gureq := GetUpdatesRequest{
 		Offset: b.offset,
 	}
@@ -159,7 +167,7 @@ func getUpdates() (*GetUpdatesResponse, error) {
 	return &gures, nil
 }
 
-func sendMessage(chatId int, message string) (*SendMessageResponse, error) {
+func (b *Bot) sendMessage(chatId int, message string) (*SendMessageResponse, error) {
 	smreq := SendMessageRequest{
 		ChatId: chatId,
 		Text:   message,
@@ -186,7 +194,7 @@ func sendMessage(chatId int, message string) (*SendMessageResponse, error) {
 	return &smres, nil
 }
 
-func loadChats() error {
+func (b *Bot) loadChats() error {
 	f, err := os.Open(chatsFile)
 	if err != nil {
 		return errors.New("opening chats file failed")
@@ -199,7 +207,7 @@ func loadChats() error {
 	return nil
 }
 
-func updateChats() error {
+func (b *Bot) updateChats() error {
 	f, err := os.OpenFile(chatsFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, chatsFileFileMode)
 	if err != nil {
 		return errors.New("opening chats file failed")
@@ -212,13 +220,13 @@ func updateChats() error {
 	return nil
 }
 
-func publishInfoMessage(message string) {
+func (b *Bot) info(message string) {
 	b.Output <- &Output{
 		InfoMessage: message,
 	}
 }
 
-func publishErrorMessage(message string) {
+func (b *Bot) error(message string) {
 	b.Output <- &Output{
 		ErrorMessage: message,
 	}

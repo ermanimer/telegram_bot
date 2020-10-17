@@ -1,22 +1,5 @@
 package telegram_bot
 
-import (
-	"sync"
-	"time"
-)
-
-type Bot struct {
-	Output         chan *Output
-	token          string
-	chats          map[int]bool
-	isStarted      bool
-	getUpdatesUrl  string
-	sendMessageUrl string
-	interval       time.Duration
-	offset         int
-	mutex          *sync.Mutex
-}
-
 type Output struct {
 	InfoMessage  string
 	ErrorMessage string
