@@ -1,15 +1,21 @@
 package telegram_bot
 
-type Output struct {
+type input struct {
+	Start   bool
+	Stop    bool
+	Message string
+}
+
+type output struct {
 	InfoMessage  string
 	ErrorMessage string
 }
 
-type GetUpdatesRequest struct {
+type getUpdatesRequest struct {
 	Offset int `json:"offset"`
 }
 
-type GetUpdatesResponse struct {
+type getUpdatesResponse struct {
 	Ok     bool `json:"ok"`
 	Result []struct {
 		UpdateId int `json:"update_id"`
@@ -41,12 +47,12 @@ type GetUpdatesResponse struct {
 	Description string `json:"description"`
 }
 
-type SendMessageRequest struct {
+type sendMessageRequest struct {
 	ChatId int    `json:"chat_id"`
 	Text   string `json:"text"`
 }
 
-type SendMessageResponse struct {
+type sendMessageResponse struct {
 	Ok     bool `json:"ok"`
 	Result struct {
 		MessageId int `json:"message_id"`
