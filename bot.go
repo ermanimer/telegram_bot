@@ -122,7 +122,7 @@ func (b *Bot) SendMessagef(messageFormat string, messages ...interface{}) {
 	}
 }
 
-//gets chat updates regularly with using an sleep interval
+//gets chat updates regularly with using a sleep interval
 func (b *Bot) startGettingUpdates() {
 	b.isStarted = true
 	b.sendInfoMessage("bot is started")
