@@ -27,7 +27,7 @@ import (
 
 func main() {
 	//create new bot with your token and updating interval
-	b := tb.NewBot("1389258239:AAFjCSrcodFVIRVtNaws5zEcc1VJO1vp1J8", 1000)
+	b := tb.NewBot("your_token", 1000)
 	//listen bot's output
 	go func() {
 		for o := range b.Output {
