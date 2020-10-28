@@ -256,7 +256,7 @@ func (b *Bot) loadChats() error {
 	defer f.Close()
 	err = json.NewDecoder(f).Decode(&b.chats)
 	if err != nil {
-		return errors.New("decoding chats file failed")
+		return errors.New("decoding chats failed")
 	}
 	return nil
 }
