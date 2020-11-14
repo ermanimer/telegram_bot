@@ -53,4 +53,4 @@ func main() {
 ```
 
 ## Screen Shot
-![Screen Shot](screenshot.png)
+![Screen Shot](/images/screenshot.png)
