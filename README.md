@@ -8,6 +8,13 @@ Go Telegram Bot
 telegram_bot gets updates of telegram bot, sends message to telegram bot's chats.
 
 ## Telegram Bots
-Telegram bots can be created with [botfather](https://t.me/botfather). 
+Telegram bots can be created with [botfather](https://t.me/botfather).
 
+## Usage 
+```go
+package main
 
+func main() {
+    //...
+}
+```
