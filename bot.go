@@ -77,11 +77,11 @@ func (tb *Bot) Stop() {
 	close(tb.d)
 }
 
-//SendMessage sends a message to chat which is defined by chatId.
-func (tb *Bot) SendMessage(chatId int, message string) (*MessageResponse, error) {
+//SendMessage sends a message to chat which is defined by chatID.
+func (tb *Bot) SendMessage(chatID int, message string) (*MessageResponse, error) {
 	//create message request
 	mreq := messageRequest{
-		ChatId: chatId,
+		ChatID: chatID,
 		Text:   message,
 	}
 	//create http request body
@@ -164,8 +164,8 @@ func (tb *Bot) updateOffset(ur *UpdatesResponse) {
 	}
 	//set offset to the latest update id
 	for _, r := range ur.Result {
-		if r.UpdateId > tb.offset {
-			tb.offset = r.UpdateId
+		if r.UpdateID > tb.offset {
+			tb.offset = r.UpdateID
 		}
 	}
 }

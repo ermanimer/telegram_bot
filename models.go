@@ -9,18 +9,18 @@ type updatesRequest struct {
 type UpdatesResponse struct {
 	Ok     bool `json:"ok"`
 	Result []struct {
-		UpdateId int `json:"update_id"`
+		UpdateID int `json:"update_id"`
 		Message  struct {
-			MessageId int `json:"message_id"`
+			MessageID int `json:"message_id"`
 			From      struct {
-				Id           int    `json:"id"`
+				ID           int    `json:"id"`
 				IsBot        bool   `json:"is_bot"`
 				FirstName    string `json:"first_name"`
 				LastName     string `json:"last_name"`
 				LanguageCode string `json:"language_code"`
 			} `json:"from"`
 			Chat struct {
-				Id        int    `json:"id"`
+				ID        int    `json:"id"`
 				FirstName string `json:"first_name"`
 				LastName  string `json:"last_name"`
 				Type      string `json:"type"`
@@ -40,7 +40,7 @@ type UpdatesResponse struct {
 
 //messageRequest represents send message request.
 type messageRequest struct {
-	ChatId int    `json:"chat_id"`
+	ChatID int    `json:"chat_id"`
 	Text   string `json:"text"`
 }
 
@@ -48,15 +48,15 @@ type messageRequest struct {
 type MessageResponse struct {
 	Ok     bool `json:"ok"`
 	Result struct {
-		MessageId int `json:"message_id"`
+		MessageID int `json:"message_id"`
 		From      struct {
-			Id        int    `json:"id"`
+			ID        int    `json:"id"`
 			IsBot     bool   `json:"is_bot"`
 			FirstName string `json:"first_name"`
 			Username  string `json:"username"`
 		} `json:"from"`
 		Chat struct {
-			Id        int    `json:"id"`
+			ID        int    `json:"id"`
 			FirstName string `json:"first_name"`
 			LastName  string `json:"last_name"`
 			Type      string `json:"type"`
