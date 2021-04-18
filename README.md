@@ -10,7 +10,8 @@ telegram_bot gets updates of telegram bot, sends message to telegram bot's chats
 ## Telegram Bots
 Telegram bots can be created with [botfather](https://t.me/botfather).
 
-## Usage 
+## Sample Application
+Sample application creates and starts a bot. Listens bot's updates. Sends "hello" message for every "/start" message.
 ```go
 package main
 
