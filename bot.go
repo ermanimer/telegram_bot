@@ -29,7 +29,7 @@ type Bot struct {
 	sendMessageURL string                //url for send message request
 }
 
-//New, creates new bot
+//New creates new bot.
 func New(token string, interval, timeout int) *Bot {
 	return &Bot{
 		Token:          token,
@@ -68,7 +68,7 @@ func (tb *Bot) Start() {
 	}()
 }
 
-//Stop, stops bot
+//Stop stops bot.
 func (tb *Bot) Stop() {
 	//stop ticker
 	tb.t.Stop()

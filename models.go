@@ -1,11 +1,11 @@
 package telegram_bot
 
-//updatesRequest represents get updates request body
+//updatesRequest represents get updates request body.
 type updatesRequest struct {
 	Offset int `json:"offset"`
 }
 
-//UpdateResponse represents response for get updates request
+//UpdatesResponse represents response for get updates request.
 type UpdatesResponse struct {
 	Ok     bool `json:"ok"`
 	Result []struct {
@@ -38,13 +38,13 @@ type UpdatesResponse struct {
 	Description string `json:"description"`
 }
 
-//messageRequest represents send message request
+//messageRequest represents send message request.
 type messageRequest struct {
 	ChatId int    `json:"chat_id"`
 	Text   string `json:"text"`
 }
 
-//MessageResponse represents response for send message request
+//MessageResponse represents response for send message request.
 type MessageResponse struct {
 	Ok     bool `json:"ok"`
 	Result struct {
