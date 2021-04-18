@@ -18,7 +18,7 @@ const (
 //Bot represent telegram bot
 type Bot struct {
 	Token          string
-	Interval       time.Duration         //interval between continous get updates requests
+	Interval       time.Duration         //interval between continuous get updates requests
 	Timeout        time.Duration         //http client timeout for get updates and send message requests
 	Updates        chan *UpdatesResponse //channel for publishing get updates responses
 	Error          chan error            //channel for publishing get updates reqeust errors
