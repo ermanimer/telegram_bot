@@ -30,10 +30,11 @@ type Bot struct {
 }
 
 //New creates new bot.
-func New(token string, interval, timeout int) *Bot {
+func New(token string, interval, timeout time.Duration) *Bot {
 	return &Bot{
 		Token:          token,
-		Interval:       time.Duration(interval) * time.Millisecond,
+		Interval:       interval,
+		Timeout:        timeout,
 		Updates:        make(chan *UpdatesResponse),
 		Error:          make(chan error),
 		getUpdatesURL:  strings.Replace(getUpdatesURLTemplate, "<token>", token, 1),
