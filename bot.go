@@ -3,311 +3,168 @@ package telegram_bot
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
-	"sync"
 	"time"
-)
-
-type Bot struct {
-	input          chan *input
-	Output         chan *output
-	token          string
-	chats          map[int]bool
-	isStarted      bool
-	getUpdatesUrl  string
-	sendMessageUrl string
-	interval       time.Duration
-	offset         int
-	mutex          *sync.Mutex
-}
-
-//chats file
-const (
-	chatsFile         = "./chats.json"
-	chatsFileFileMode = 0644
 )
 
 //telegram api url templates
 const (
-	getUpdatesUrlTemplate  = "https://api.telegram.org/bot<token>/getUpdates"
-	sendMessageUrlTemplate = "https://api.telegram.org/bot<token>/sendMessage"
+	getUpdatesURLTemplate  = "https://api.telegram.org/bot<token>/getUpdates"
+	sendMessageURLTemplate = "https://api.telegram.org/bot<token>/sendMessage"
 )
 
-//update commands
-const (
-	startCommand = "/start"
-	stopCommand  = "/stop"
-)
+//Bot represent telegram bot
+type Bot struct {
+	Token          string
+	Interval       time.Duration         //interval between continous get updates requests
+	Timeout        time.Duration         //http client timeout for get updates and send message requests
+	Updates        chan *UpdatesResponse //channel for publishing get updates responses
+	Error          chan error            //channel for publishing get updates reqeust errors
+	t              *time.Ticker          //ticker for get updates requests
+	d              chan struct{}         //done channel to stop get updates loop
+	offset         int                   //offset for get updates request, to filter out previously received updates
+	getUpdatesURL  string                //url for get updates request
+	sendMessageURL string                //url for send message request
+}
 
-func NewBot(token string, interval int) *Bot {
-	//create a new instance
-	b := &Bot{
-		input:          make(chan *input),
-		Output:         make(chan *output),
-		token:          token,
-		chats:          make(map[int]bool),
-		getUpdatesUrl:  strings.ReplaceAll(getUpdatesUrlTemplate, "<token>", token),
-		sendMessageUrl: strings.ReplaceAll(sendMessageUrlTemplate, "<token>", token),
-		interval:       time.Duration(interval) * time.Millisecond,
-		mutex:          &sync.Mutex{},
+//New, creates new bot
+func New(token string, interval, timeout int) *Bot {
+	return &Bot{
+		Token:          token,
+		Interval:       time.Duration(interval) * time.Millisecond,
+		Updates:        make(chan *UpdatesResponse),
+		Error:          make(chan error),
+		getUpdatesURL:  strings.Replace(getUpdatesURLTemplate, "<token>", token, 1),
+		sendMessageURL: strings.Replace(sendMessageURLTemplate, "<token>", token, 1),
 	}
-	//listen input channel
+}
+
+//Start starts bot.
+func (tb *Bot) Start() {
+	//initialize ticker and done channel
+	tb.t = time.NewTicker(tb.Interval)
+	tb.d = make(chan struct{})
+	//start
 	go func() {
+		defer func() {
+			close(tb.Updates)
+			close(tb.Error)
+		}()
 		for {
-			i := <-b.input
-			//receive start signal to start getting chat updates
-			if i.Start {
-				if b.isStarted {
-					b.sendErrorMessage("bot is already started")
+			select {
+			case <-tb.t.C:
+				u, err := tb.getUpdates()
+				if err != nil {
+					tb.Error <- fmt.Errorf("getting updates failed: %s", err.Error())
 					continue
 				}
-				go b.startGettingUpdates()
-				continue
-			}
-			//receive stop signal to stop getting chat updates
-			if i.Stop {
-				if !b.isStarted {
-					b.sendErrorMessage("bot is already stopped or not initialized")
-					continue
-				}
-				b.stopGettingUpdates()
-				continue
-			}
-			//receive a message to send to all active chats
-			if i.Message != "" {
-				if !b.isStarted {
-					b.sendErrorMessage("bot is already stopped or not initialized")
-				}
-				if len(b.chats) == 0 {
-					b.sendErrorMessage("bot doesn't have any chats")
-				}
-				b.sendMessageToAllActiveChats(i.Message)
+				tb.Updates <- u
+			case <-tb.d:
+				return
 			}
 		}
 	}()
-	//return created instance
-	return b
 }
 
-//starts getting updates
-func (b *Bot) Start() {
-	b.input <- &input{
-		Start: true,
-	}
+//Stop, stops bot
+func (tb *Bot) Stop() {
+	//stop ticker
+	tb.t.Stop()
+	//stop
+	close(tb.d)
 }
 
-//stops getting updates
-func (b *Bot) Stop() {
-	b.input <- &input{
-		Stop: true,
-	}
-}
-
-//sends message to all active chats
-func (b *Bot) SendMessage(messages ...interface{}) {
-	messageFormat := createMessageFormat(len(messages))
-	b.input <- &input{
-		Message: fmt.Sprintf(messageFormat, messages...),
-	}
-}
-
-//sends formatted message to all active chats
-func (b *Bot) SendMessagef(messageFormat string, messages ...interface{}) {
-	b.input <- &input{
-		Message: fmt.Sprintf(messageFormat, messages...),
-	}
-}
-
-//gets chat updates regularly with using a sleep interval
-func (b *Bot) startGettingUpdates() {
-	b.isStarted = true
-	b.sendInfoMessage("bot is started")
-	err := b.loadChats()
-	if err != nil {
-		b.sendErrorMessage(err.Error())
-	}
-	for {
-		time.Sleep(b.interval)
-		if !b.isStarted {
-			break
-		}
-		r, err := b.getUpdates()
-		if err != nil {
-			b.sendErrorMessage(err.Error())
-			continue
-		}
-		if !r.Ok {
-			b.sendErrorMessagef("getting updates failed error code: %v description: %v", r.ErrorCode, r.Description)
-			continue
-		}
-		us := r.Result
-		if len(us) == 0 {
-			continue
-		}
-		for _, u := range us {
-			updateId := u.UpdateId
-			command := u.Message.Text
-			chatId := u.Message.Chat.Id
-			firstName := u.Message.From.FirstName
-			lastName := u.Message.From.LastName
-			switch command {
-			case startCommand:
-				b.chats[chatId] = true
-			case stopCommand:
-				b.chats[chatId] = false
-			}
-			b.sendInfoMessagef("%v command received from chat id: %v first name: %v last name: %v", command, chatId, firstName, lastName)
-			b.offset = updateId + 1
-		}
-		err = b.saveChats()
-		if err != nil {
-			b.sendErrorMessage(err.Error())
-		}
-	}
-	b.sendInfoMessage("bot is stopped")
-}
-
-//stops getting chat updates
-func (b *Bot) stopGettingUpdates() {
-	b.isStarted = false
-}
-
-//sends message to all active chats synchronously
-func (b *Bot) sendMessageToAllActiveChats(message string) {
-	for chatId, isStarted := range b.chats {
-		if isStarted {
-			r, err := b.sendMessage(chatId, message)
-			if err != nil {
-				b.sendErrorMessage(err.Error())
-				continue
-			}
-			if !r.Ok {
-				b.sendErrorMessagef("sending message failed to chat id: %v error code: %v description: %v", chatId, r.ErrorCode, r.Description)
-			}
-		}
-	}
-}
-
-//gets chat updates
-func (b *Bot) getUpdates() (*getUpdatesResponse, error) {
-	gureq := getUpdatesRequest{
-		Offset: b.offset,
-	}
-	reqb, err := json.Marshal(&gureq)
-	if err != nil {
-		return nil, errors.New("marshalling get updates request body failed")
-	}
-	req, err := http.NewRequest("POST", b.getUpdatesUrl, bytes.NewBuffer(reqb))
-	if err != nil {
-		return nil, errors.New("creating get updates request body failed")
-	}
-	req.Header.Set("Content-type", "application/json")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, errors.New("doing get updates http request failed")
-	}
-	defer res.Body.Close()
-	var gures getUpdatesResponse
-	err = json.NewDecoder(res.Body).Decode(&gures)
-	if err != nil {
-		return nil, errors.New("unmarshalling get updates response failed")
-	}
-	return &gures, nil
-}
-
-//sends message to an active chat
-func (b *Bot) sendMessage(chatId int, message string) (*sendMessageResponse, error) {
-	smreq := sendMessageRequest{
+//SendMessage sends a message to chat which is defined by chatId.
+func (tb *Bot) SendMessage(chatId int, message string) (*MessageResponse, error) {
+	//create message request
+	mreq := messageRequest{
 		ChatId: chatId,
 		Text:   message,
 	}
-	reqb, err := json.Marshal(&smreq)
+	//create http request body
+	reqb, err := json.Marshal(&mreq)
 	if err != nil {
-		return nil, errors.New("marshalling send message request body failed")
+		return nil, fmt.Errorf("encoding http request body failed: %s", err.Error())
 	}
-	req, err := http.NewRequest("POST", b.sendMessageUrl, bytes.NewBuffer(reqb))
+	//create http request
+	req, err := http.NewRequest("POST", tb.sendMessageURL, bytes.NewBuffer(reqb))
 	if err != nil {
-		return nil, errors.New("creating send message http request failed")
+		return nil, fmt.Errorf("creating http request failed: %s", err.Error())
 	}
+	//set request headers
 	req.Header.Set("Content-type", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	//create http client
+	c := http.Client{
+		Timeout: tb.Timeout,
+	}
+	//do http request
+	res, err := c.Do(req)
 	if err != nil {
-		return nil, errors.New("doing send message http request failed")
+		return nil, fmt.Errorf("http request failed: %s", err.Error())
 	}
 	defer res.Body.Close()
-	var smres sendMessageResponse
-	err = json.NewDecoder(res.Body).Decode(&smres)
+	//decode message response
+	var mres MessageResponse
+	err = json.NewDecoder(res.Body).Decode(&mres)
 	if err != nil {
-		return nil, errors.New("unmarshalling send message response failed")
+		return nil, fmt.Errorf("decoding message response failed: %s", err.Error())
 	}
-	return &smres, nil
+	//return updates response
+	return &mres, nil
 }
 
-//loads chats records from chats file
-func (b *Bot) loadChats() error {
-	f, err := os.Open(chatsFile)
+//getUpdates posts a http request to get updates from telegram api.
+func (tb *Bot) getUpdates() (*UpdatesResponse, error) {
+	//create updates request
+	ureq := updatesRequest{
+		Offset: tb.offset + 1,
+	}
+	//create http request body
+	reqb, err := json.Marshal(&ureq)
 	if err != nil {
-		return errors.New("opening chats file failed")
+		return nil, fmt.Errorf("encoding http request body failed: %s", err.Error())
 	}
-	defer f.Close()
-	err = json.NewDecoder(f).Decode(&b.chats)
+	//create http request
+	req, err := http.NewRequest("POST", tb.getUpdatesURL, bytes.NewBuffer(reqb))
 	if err != nil {
-		return errors.New("decoding chats failed")
+		return nil, fmt.Errorf("creating http request failed: %s", err.Error())
 	}
-	return nil
-}
-
-//saves chat records to chats file
-func (b *Bot) saveChats() error {
-	f, err := os.OpenFile(chatsFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, chatsFileFileMode)
+	//set request headers
+	req.Header.Set("Content-type", "application/json")
+	//create http client
+	c := http.Client{
+		Timeout: tb.Timeout,
+	}
+	//do http request
+	res, err := c.Do(req)
 	if err != nil {
-		return errors.New("opening chats file failed")
+		return nil, fmt.Errorf("http request failed: %s", err.Error())
 	}
-	defer f.Close()
-	err = json.NewEncoder(f).Encode(b.chats)
+	defer res.Body.Close()
+	//decode updates response
+	var ures UpdatesResponse
+	err = json.NewDecoder(res.Body).Decode(&ures)
 	if err != nil {
-		return errors.New("encoding chats failed")
+		return nil, fmt.Errorf("decoding updates response failed: %s", err.Error())
 	}
-	return nil
+	//update offset
+	tb.updateOffset(&ures)
+	//return updates response
+	return &ures, nil
 }
 
-//sends info message through output channel
-func (b *Bot) sendInfoMessage(messages ...interface{}) {
-	messageFormat := createMessageFormat(len(messages))
-	b.Output <- &output{
-		InfoMessage: fmt.Sprintf(messageFormat, messages...),
+//updateOffset updates offset using latest update id of updates response.
+func (tb *Bot) updateOffset(ur *UpdatesResponse) {
+	//return if updates response is not ok or there is no new result
+	if !ur.Ok || len(ur.Result) == 0 {
+		return
 	}
-}
-
-//sends formatted info message output input channel
-func (b *Bot) sendInfoMessagef(messageFormat string, messages ...interface{}) {
-	b.Output <- &output{
-		InfoMessage: fmt.Sprintf(messageFormat, messages...),
+	//set offset to the latest update id
+	for _, r := range ur.Result {
+		if r.UpdateId > tb.offset {
+			tb.offset = r.UpdateId
+		}
 	}
-}
-
-//sends error message through output channel
-func (b *Bot) sendErrorMessage(messages ...interface{}) {
-	messageFormat := createMessageFormat(len(messages))
-	b.Output <- &output{
-		ErrorMessage: fmt.Sprintf(messageFormat, messages...),
-	}
-}
-
-//sends formatted error message through output channel
-func (b *Bot) sendErrorMessagef(messageFormat string, messages ...interface{}) {
-	b.Output <- &output{
-		ErrorMessage: fmt.Sprintf(messageFormat, messages...),
-	}
-}
-
-//creates message format for message functions
-func createMessageFormat(messageCount int) string {
-	messageFormat := strings.Repeat("%v, ", messageCount)
-	messageFormat = strings.Trim(messageFormat, ", ")
-	return messageFormat
 }
